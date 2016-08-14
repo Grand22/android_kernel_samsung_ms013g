@@ -1182,6 +1182,35 @@ static inline struct ipv6_rt_hdr *ip6_rthdr_dup(struct ipv6_rt_hdr *src,
 	return src ? kmemdup(src, (src->hdrlen + 1) * 8, gfp) : NULL;
 }
 
+<<<<<<< HEAD
+=======
+static void ip6_append_data_mtu(unsigned int *mtu,
+				int *maxfraglen,
+				unsigned int fragheaderlen,
+				struct sk_buff *skb,
+				struct rt6_info *rt,
+				bool pmtuprobe)
+{
+	if (!(rt->dst.flags)) {
+		if (skb == NULL) {
+			/* first fragment, reserve header_len */
+			*mtu = *mtu - rt->dst.header_len;
+
+		} else {
+			/*
+			 * this fragment is not first, the headers
+			 * space is regarded as data space.
+			 */
+			*mtu = min(*mtu, pmtuprobe ?
+				   rt->dst.dev->mtu :
+				   dst_mtu(rt->dst.path));
+		}
+		*maxfraglen = ((*mtu - fragheaderlen) & ~7)
+			      + fragheaderlen - sizeof(struct frag_hdr);
+	}
+}
+
+>>>>>>> 18aec4c... Upstream : 3.4.2
 int ip6_append_data(struct sock *sk, int getfrag(void *from, char *to,
 	int offset, int len, int odd, struct sk_buff *skb),
 	void *from, int length, int transhdrlen,
@@ -1249,8 +1278,12 @@ int ip6_append_data(struct sock *sk, int getfrag(void *from, char *to,
 		inet->cork.fl.u.ip6 = *fl6;
 		np->cork.hop_limit = hlimit;
 		np->cork.tclass = tclass;
-		mtu = np->pmtudisc == IPV6_PMTUDISC_PROBE ?
-		      rt->dst.dev->mtu : dst_mtu(&rt->dst);
+		if (rt->dst.flags)
+			mtu = np->pmtudisc == IPV6_PMTUDISC_PROBE ?
+			      rt->dst.dev->mtu : dst_mtu(&rt->dst);
+		else
+			mtu = np->pmtudisc == IPV6_PMTUDISC_PROBE ?
+			      rt->dst.dev->mtu : dst_mtu(rt->dst.path);
 		if (np->frag_size < mtu) {
 			if (np->frag_size)
 				mtu = np->frag_size;
@@ -1361,10 +1394,9 @@ alloc_new_skb:
 			 * we know we need more fragment(s).
 			 */
 			datalen = length + fraggap;
-			if (datalen > (cork->length <= mtu && !(cork->flags & IPCORK_ALLFRAG) ? mtu : maxfraglen) - fragheaderlen)
-				datalen = maxfraglen - fragheaderlen;
 
-			fraglen = datalen + fragheaderlen;
+			if (datalen > (cork->length <= mtu && !(cork->flags & IPCORK_ALLFRAG) ? mtu : maxfraglen) - fragheaderlen)
+				datalen = maxfraglen - fragheaderlen - rt->dst.trailer_len;
 			if ((flags & MSG_MORE) &&
 			    !(rt->dst.dev->features&NETIF_F_SG))
 				alloclen = mtu;
@@ -1373,13 +1405,16 @@ alloc_new_skb:
 
 			alloclen += dst_exthdrlen;
 
-			/*
-			 * The last fragment gets additional space at tail.
-			 * Note: we overallocate on fragments with MSG_MODE
-			 * because we have no idea if we're the last one.
-			 */
-			if (datalen == length + fraggap)
-				alloclen += rt->dst.trailer_len;
+			if (datalen != length + fraggap) {
+				/*
+				 * this is not the last fragment, the trailer
+				 * space is regarded as data space.
+				 */
+				datalen += rt->dst.trailer_len;
+			}
+
+			alloclen += rt->dst.trailer_len;
+			fraglen = datalen + fragheaderlen;
 
 			/*
 			 * We just reserve space for fragment header.
