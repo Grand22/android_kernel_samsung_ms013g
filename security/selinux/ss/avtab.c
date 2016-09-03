@@ -623,7 +623,6 @@ int avtab_write_item(struct policydb *p, struct avtab_node *cur, void *fp)
 	if (rc)
 		return rc;
 
-<<<<<<< HEAD
 	if (cur->key.specified & AVTAB_XPERMS) {
 		if (avtab_android_m_compat == 0) {
 			rc = put_entry(&cur->datum.u.xperms->specified,
@@ -631,16 +630,8 @@ int avtab_write_item(struct policydb *p, struct avtab_node *cur, void *fp)
 			if (rc)
 				return rc;
 		}
-		rc = put_entry(&cur->datum.u.xperms->driver, sizeof(u8), 1, fp);
-		if (rc)
-			return rc;
 		for (i = 0; i < ARRAY_SIZE(cur->datum.u.xperms->perms.p); i++)
 			buf32[i] = cpu_to_le32(cur->datum.u.xperms->perms.p[i]);
-=======
-	if (cur->key.specified & AVTAB_OP) {
-		for (i = 0; i < ARRAY_SIZE(cur->datum.u.ops->op.perms); i++)
-			buf32[i] = cpu_to_le32(cur->datum.u.ops->op.perms[i]);
->>>>>>> b3c0987... Revert "SELinux: ss: Fix policy write for ioctl operations"
 		rc = put_entry(buf32, sizeof(u32),
 				ARRAY_SIZE(cur->datum.u.xperms->perms.p), fp);
 	} else {
